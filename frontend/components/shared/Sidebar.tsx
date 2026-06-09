@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
 import {
   LayoutDashboard, Eye, Search, TrendingUp, Briefcase,
-  FileText, Settings, LogOut, Zap, Bell, ChevronRight,
+  FileText, Settings, LogOut, Zap, Bell, ChevronRight, Menu, X,
 } from "lucide-react";
 import { useWatchlistStore, useAuthStore } from "@/lib/store";
 
@@ -29,7 +30,7 @@ function LogoIcon() {
   );
 }
 
-export function Sidebar() {
+function SidebarContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
   const { unreadCount } = useWatchlistStore();
   const { user, logout } = useAuthStore();
@@ -51,8 +52,8 @@ export function Sidebar() {
       }}
     >
       {/* Logo */}
-      <Link href="/dashboard" style={{ textDecoration: "none" }}>
-        <div style={{ padding: "20px 16px 16px", cursor: "pointer" }}>
+      <Link href="/dashboard" style={{ textDecoration: "none" }} onClick={onClose}>
+        <div style={{ padding: "20px 16px 16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <div
               style={{
@@ -78,6 +79,11 @@ export function Sidebar() {
               </div>
             </div>
           </div>
+          {onClose && (
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", padding: 6 }}>
+              <X size={16} />
+            </button>
+          )}
         </div>
       </Link>
 
@@ -96,7 +102,7 @@ export function Sidebar() {
               transition={{ delay: i * 0.04, duration: 0.3 }}
               style={{ marginBottom: 2 }}
             >
-              <Link href={item.href} style={{ textDecoration: "none", display: "block" }}>
+              <Link href={item.href} style={{ textDecoration: "none", display: "block" }} onClick={onClose}>
                 <div className={`sidebar-item${active ? " active" : ""}`}>
                   <Icon size={16} className="sidebar-icon" strokeWidth={active ? 2.2 : 1.8} />
                   <span style={{ flex: 1 }}>{item.label}</span>
@@ -185,5 +191,58 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+export function Sidebar() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <div className="sidebar-mobile-hidden">
+        <SidebarContent />
+      </div>
+
+      {/* Mobile hamburger button */}
+      <button
+        className="hamburger-btn"
+        onClick={() => setMobileOpen(true)}
+        style={{
+          position: "fixed", top: 12, left: 12, zIndex: 300,
+          width: 40, height: 40, borderRadius: 10,
+          background: "#0F172A", border: "none", cursor: "pointer",
+          display: "none", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+        }}
+        aria-label="Open menu"
+      >
+        <Menu size={18} color="#F1F5F9" />
+      </button>
+
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 199 }}
+            />
+            <motion.div
+              initial={{ x: -240 }}
+              animate={{ x: 0 }}
+              exit={{ x: -240 }}
+              transition={{ type: "tween", duration: 0.22 }}
+              style={{ position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 200 }}
+            >
+              <SidebarContent onClose={() => setMobileOpen(false)} />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

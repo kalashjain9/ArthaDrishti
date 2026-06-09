@@ -1,350 +1,173 @@
 "use client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import api from "@/lib/api";
-import { formatCurrency, riskColor, timeAgo } from "@/lib/utils";
-import { Plus, Trash2, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
+import { CompanyAvatar } from "@/components/shared/MarketOverview";
+import { COMPANIES, PORTFOLIO_STATS } from "@/lib/market-data";
+import { riskColor, riskLabel } from "@/lib/utils";
+import { TrendingUp, TrendingDown, Briefcase, Shield, BarChart3, DollarSign } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 
-const PORTFOLIO_COLORS = ["#F59E0B", "#6366F1", "#10B981", "#EF4444", "#3B82F6", "#EC4899", "#14B8A6", "#F97316"];
+const COLORS = ["#4338CA","#059669","#D97706","#DC2626","#0284C7","#7C3AED","#DB2777","#0891B2"];
 
 export default function PortfolioPage() {
-  const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ symbol: "", quantity: "", avg_buy_price: "" });
-  const qc = useQueryClient();
-
   const { data: holdings } = useQuery({
     queryKey: ["portfolio"],
     queryFn: async () => {
-      const { data } = await api.get("/portfolio/holdings");
-      return data;
-    },
-    refetchInterval: 60 * 1000,
-  });
-
-  const { data: riskOverview } = useQuery({
-    queryKey: ["portfolio-risk"],
-    queryFn: async () => {
-      const { data } = await api.get("/portfolio/risk-overview");
+      const { data } = await api.get("/portfolio");
       return data;
     },
   });
 
-  const addMut = useMutation({
-    mutationFn: async () => {
-      await api.post("/portfolio/holdings", {
-        symbol: form.symbol.toUpperCase(),
-        quantity: parseFloat(form.quantity),
-        avg_buy_price: parseFloat(form.avg_buy_price),
-      });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["portfolio-risk"] });
-      setAddOpen(false);
-      setForm({ symbol: "", quantity: "", avg_buy_price: "" });
-    },
-  });
+  const rows = holdings || [];
 
-  const removeMut = useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/portfolio/holdings/${id}`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["portfolio"] });
-      qc.invalidateQueries({ queryKey: ["portfolio-risk"] });
-    },
-  });
+  const totalInvested = rows.reduce((s: number, h: any) => s + h.avg_buy_price * h.quantity, 0);
+  const totalCurrent  = rows.reduce((s: number, h: any) => s + h.current_price * h.quantity, 0);
+  const totalPnl = totalCurrent - totalInvested;
+  const pnlPct   = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
 
-  const totalValue = holdings?.reduce((s: number, h: any) => s + (h.current_value || 0), 0) || 0;
-  const totalPnl = holdings?.reduce((s: number, h: any) => s + ((h.current_value || 0) - (h.buy_value || 0)), 0) || 0;
-  const pnlPct = totalValue > 0 ? (totalPnl / (totalValue - totalPnl)) * 100 : 0;
-
-  const pieData = holdings?.map((h: any, i: number) => ({
+  const pieData = rows.map((h: any, i: number) => ({
     name: h.symbol,
-    value: h.current_value || 0,
-    fill: PORTFOLIO_COLORS[i % PORTFOLIO_COLORS.length],
-  })) || [];
+    value: Math.round(h.current_price * h.quantity),
+    fill: COLORS[i % COLORS.length],
+  }));
+
+  const sectorMap: Record<string, number> = {};
+  rows.forEach((h: any) => {
+    sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.current_price * h.quantity;
+  });
+  const sectorData = Object.entries(sectorMap).map(([name, value]) => ({ name, value: Math.round(value) }));
+
+  const isUp = totalPnl >= 0;
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ color: "var(--text-primary)", fontSize: 22, fontWeight: 700, margin: 0 }}>Portfolio</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-            AI-powered risk analysis for your holdings
-          </p>
-        </div>
-        <button
-          onClick={() => setAddOpen(!addOpen)}
-          style={{
-            marginLeft: "auto",
-            background: "var(--accent-primary)",
-            color: "#000",
-            border: "none",
-            borderRadius: 8,
-            padding: "9px 18px",
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-          }}
-        >
-          <Plus size={15} /> Add Holding
-        </button>
+      <div style={{ marginBottom: 24 }}>
+        <h1 className="page-title">Portfolio</h1>
+        <p className="page-subtitle">AI-powered risk analysis across {rows.length} holdings</p>
       </div>
 
-      {/* Add Holding Form */}
-      {addOpen && (
-        <div style={{
-          background: "var(--bg-surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: 20,
-          marginBottom: 20,
-          display: "flex",
-          gap: 12,
-          alignItems: "flex-end",
-        }}>
-          {[
-            { key: "symbol", label: "NSE Symbol", placeholder: "RELIANCE" },
-            { key: "quantity", label: "Quantity", placeholder: "100", type: "number" },
-            { key: "avg_buy_price", label: "Avg Buy Price (₹)", placeholder: "2450", type: "number" },
-          ].map((field) => (
-            <div key={field.key} style={{ flex: 1 }}>
-              <label style={{ color: "var(--text-secondary)", fontSize: 12, display: "block", marginBottom: 6 }}>
-                {field.label}
-              </label>
-              <input
-                type={field.type || "text"}
-                value={(form as any)[field.key]}
-                onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                placeholder={field.placeholder}
-                style={{
-                  width: "100%",
-                  background: "var(--bg-elevated)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  padding: "9px 12px",
-                  color: "var(--text-primary)",
-                  fontSize: 14,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
+      {/* KPI row */}
+      <div className="kpi-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+        {[
+          { label: "Portfolio Value", value: `₹${(totalCurrent || PORTFOLIO_STATS.totalValue).toLocaleString("en-IN")}`, sub: "Current market value", icon: Briefcase, cls: "kpi-indigo" },
+          { label: "Total Invested", value: `₹${(totalInvested || PORTFOLIO_STATS.invested).toLocaleString("en-IN")}`, sub: "Cost basis", icon: DollarSign, cls: "kpi-sky" },
+          { label: "Total P&L", value: `${isUp ? "+" : ""}₹${Math.abs(totalPnl || PORTFOLIO_STATS.totalPL).toLocaleString("en-IN")}`, sub: `${(pnlPct || PORTFOLIO_STATS.totalPct).toFixed(2)}% overall return`, icon: isUp ? TrendingUp : TrendingDown, cls: isUp ? "kpi-emerald" : "kpi-rose" },
+          { label: "Holdings", value: String(rows.length || PORTFOLIO_STATS.holdings), sub: "Companies tracked", icon: BarChart3, cls: "kpi-amber" },
+        ].map(({ label, value, sub, icon: Icon, cls }) => (
+          <motion.div key={label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className={`card ${cls}`}>
+            <div style={{ padding: "18px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Icon size={15} />
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", fontFamily: "'JetBrains Mono',monospace" }}>{value}</div>
+              <div style={{ fontSize: 11, marginTop: 3, opacity: 0.7 }}>{sub}</div>
             </div>
-          ))}
-          <button
-            onClick={() => addMut.mutate()}
-            disabled={addMut.isPending || !form.symbol || !form.quantity || !form.avg_buy_price}
-            style={{
-              background: "var(--accent-primary)",
-              color: "#000",
-              border: "none",
-              borderRadius: 8,
-              padding: "9px 20px",
-              fontWeight: 600,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            Add
-          </button>
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
-        <SummaryCard label="Portfolio Value" value={formatCurrency(totalValue)} icon="💼" />
-        <SummaryCard
-          label="Total P&L"
-          value={`${totalPnl >= 0 ? "+" : ""}${formatCurrency(Math.abs(totalPnl))} (${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(1)}%)`}
-          icon={totalPnl >= 0 ? "📈" : "📉"}
-          valueColor={totalPnl >= 0 ? "var(--accent-safe)" : "var(--accent-hot)"}
-        />
-        <SummaryCard
-          label="Weighted Risk"
-          value={`${(riskOverview?.weighted_risk_score || 0).toFixed(0)}/100`}
-          icon="⚠️"
-          valueColor={riskColor(riskOverview?.weighted_risk_score || 0)}
-        />
-        <SummaryCard label="Holdings" value={`${holdings?.length || 0} stocks`} icon="📊" />
+          </motion.div>
+        ))}
       </div>
 
-      {/* 2-Column Layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20, alignItems: "start" }}>
-        {/* Holdings Table */}
-        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)" }}>
-            <span style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 15 }}>Holdings</span>
+      {/* Charts row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+        {/* Pie */}
+        <div className="card" style={{ padding: 20 }}>
+          <div className="section-header"><BarChart3 size={14} style={{ color: "var(--primary)" }} /><span className="section-title">Allocation by Stock</span></div>
+          <div style={{ marginTop: 12, height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={80} label={({ name }) => name}>
+                  {pieData.map((entry: any, i: number) => <Cell key={i} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString("en-IN")}`} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "var(--bg-elevated)" }}>
-                  {["Symbol", "Qty", "Avg Price", "Current", "P&L", "Risk Score", ""].map(h => (
-                    <th key={h} style={{ padding: "9px 16px", color: "var(--text-muted)", fontSize: 11, fontWeight: 600, textAlign: h === "Symbol" ? "left" : "right" }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(!holdings || holdings.length === 0) ? (
-                  <tr>
-                    <td colSpan={7} style={{ padding: 32, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-                      No holdings yet. Add your first stock.
+        </div>
+
+        {/* Sector bar */}
+        <div className="card" style={{ padding: 20 }}>
+          <div className="section-header"><Shield size={14} style={{ color: "var(--primary)" }} /><span className="section-title">Sector Allocation</span></div>
+          <div style={{ marginTop: 12, height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={sectorData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `₹${(v/1000).toFixed(0)}K`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={70} />
+                <Tooltip formatter={(v: any) => `₹${Number(v).toLocaleString("en-IN")}`} />
+                <Bar dataKey="value" fill="#4338CA" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Holdings table */}
+      <div className="card" style={{ overflow: "hidden" }}>
+        <div className="section-header"><Briefcase size={14} style={{ color: "var(--primary)" }} /><span className="section-title">Holdings Detail</span></div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #F1F5F9" }}>
+                {["Company", "Qty", "Avg Buy", "Current", "Invested", "Current Value", "P&L", "P&L %", "Risk"].map((h) => (
+                  <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((h: any) => {
+                const invested = h.avg_buy_price * h.quantity;
+                const current  = h.current_price * h.quantity;
+                const pnl      = current - invested;
+                const pct      = (pnl / invested) * 100;
+                const up       = pnl >= 0;
+                const cd       = COMPANIES[h.symbol];
+                return (
+                  <tr key={h.id} style={{ borderBottom: "1px solid #F8FAFC" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F8FAFC")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <CompanyAvatar symbol={h.symbol} size={32} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "#0F172A" }}>{h.symbol}</div>
+                          <div style={{ fontSize: 11, color: "#94A3B8" }}>{h.company_name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, fontFamily: "'JetBrains Mono',monospace", color: "#374151" }}>{h.quantity}</td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, fontFamily: "'JetBrains Mono',monospace", color: "#374151" }}>₹{h.avg_buy_price.toLocaleString("en-IN")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, fontFamily: "'JetBrains Mono',monospace", color: "#0F172A", fontWeight: 600 }}>₹{(h.current_price || cd?.price || 0).toLocaleString("en-IN")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: "#64748B" }}>₹{invested.toLocaleString("en-IN")}</td>
+                    <td style={{ padding: "12px 16px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: "#64748B" }}>₹{current.toLocaleString("en-IN")}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: up ? "#059669" : "#DC2626", fontWeight: 600 }}>
+                        {up ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN")}
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: up ? "#ECFDF5" : "#FFF1F2", color: up ? "#059669" : "#DC2626" }}>
+                        {up ? "+" : ""}{pct.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      {cd && <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: `${riskColor(cd.riskScore)}18`, color: riskColor(cd.riskScore), border: `1px solid ${riskColor(cd.riskScore)}35` }}>
+                        {riskLabel(cd.riskScore)}
+                      </span>}
                     </td>
                   </tr>
-                ) : (
-                  holdings.map((h: any) => {
-                    const pnl = (h.current_value || 0) - (h.buy_value || 0);
-                    const pnlP = h.buy_value > 0 ? (pnl / h.buy_value) * 100 : 0;
-                    const riskScore = h.risk_score || 0;
-                    return (
-                      <tr key={h.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "11px 16px" }}>
-                          <div style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>
-                            {h.symbol}
-                          </div>
-                          <div style={{ color: "var(--text-muted)", fontSize: 11 }}>{h.company_name?.substring(0, 20)}</div>
-                        </td>
-                        <td style={{ padding: "11px 16px", textAlign: "right", color: "var(--text-secondary)", fontSize: 13 }}>{h.quantity}</td>
-                        <td style={{ padding: "11px 16px", textAlign: "right", color: "var(--text-secondary)", fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>
-                          ₹{h.avg_buy_price?.toFixed(2)}
-                        </td>
-                        <td style={{ padding: "11px 16px", textAlign: "right", color: "var(--text-primary)", fontWeight: 600, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>
-                          ₹{h.current_price?.toFixed(2) || "—"}
-                        </td>
-                        <td style={{ padding: "11px 16px", textAlign: "right" }}>
-                          <div style={{ color: pnl >= 0 ? "var(--accent-safe)" : "var(--accent-hot)", fontWeight: 600, fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>
-                            {pnl >= 0 ? "+" : ""}{formatCurrency(Math.abs(pnl))}
-                          </div>
-                          <div style={{ color: pnlP >= 0 ? "var(--accent-safe)" : "var(--accent-hot)", fontSize: 11 }}>
-                            {pnlP >= 0 ? "+" : ""}{pnlP.toFixed(1)}%
-                          </div>
-                        </td>
-                        <td style={{ padding: "11px 16px", textAlign: "right" }}>
-                          <span style={{
-                            background: `${riskColor(riskScore)}20`,
-                            color: riskColor(riskScore),
-                            border: `1px solid ${riskColor(riskScore)}30`,
-                            borderRadius: 12,
-                            padding: "2px 9px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            fontFamily: "'JetBrains Mono', monospace",
-                          }}>
-                            {riskScore.toFixed(0)}/100
-                          </span>
-                        </td>
-                        <td style={{ padding: "11px 16px", textAlign: "right" }}>
-                          <button
-                            onClick={() => removeMut.mutate(h.id)}
-                            style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 4 }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr><td colSpan={9} style={{ padding: "40px 16px", textAlign: "center", color: "#94A3B8" }}>Loading portfolio data…</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
-
-        {/* Sidebar: Allocation Pie + Concentration Alerts */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Allocation Chart */}
-          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
-            <div style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Allocation</div>
-            {pieData.length > 0 ? (
-              <>
-                <div style={{ height: 200 }}>
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={80} innerRadius={40}>
-                        {pieData.map((entry: any, i: number) => (
-                          <Cell key={i} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8 }}
-                        formatter={(v: any) => [formatCurrency(v), "Value"]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {pieData.map((d: any) => (
-                    <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.fill, flexShrink: 0 }} />
-                      <span style={{ flex: 1, color: "var(--text-secondary)", fontSize: 12 }}>{d.name}</span>
-                      <span style={{ color: "var(--text-primary)", fontSize: 12, fontWeight: 600 }}>
-                        {totalValue > 0 ? `${((d.value / totalValue) * 100).toFixed(1)}%` : "—"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div style={{ color: "var(--text-muted)", fontSize: 13, textAlign: "center", padding: 24 }}>
-                No holdings to display
-              </div>
-            )}
-          </div>
-
-          {/* Concentration Alerts */}
-          {riskOverview?.concentration_alerts?.length > 0 && (
-            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
-              <div style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 14, marginBottom: 10 }}>
-                AI Risk Alerts
-              </div>
-              {riskOverview.concentration_alerts.map((alert: string, i: number) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    marginBottom: 8,
-                    padding: "8px 10px",
-                    background: "rgba(239,68,68,0.05)",
-                    border: "1px solid rgba(239,68,68,0.15)",
-                    borderRadius: 6,
-                  }}
-                >
-                  <AlertTriangle size={13} style={{ color: "#F59E0B", flexShrink: 0, marginTop: 1 }} />
-                  <span style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>{alert}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Disclaimer */}
-      <div style={{ marginTop: 24, padding: "12px 16px", background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: 8, color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5 }}>
-        <AlertTriangle size={11} style={{ display: "inline", marginRight: 6, color: "#F59E0B" }} />
-        Portfolio values and risk scores are calculated using publicly available market data. This is not investment advice. ArthaDrishti AI is not a SEBI-registered investment advisor.
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, icon, valueColor }: { label: string; value: string; icon: string; valueColor?: string }) {
-  return (
-    <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 18px" }}>
-      <div style={{ fontSize: 20, marginBottom: 6 }}>{icon}</div>
-      <div style={{ color: "var(--text-muted)", fontSize: 11, marginBottom: 4 }}>{label}</div>
-      <div style={{ color: valueColor || "var(--text-primary)", fontWeight: 700, fontSize: 18, fontFamily: "'JetBrains Mono', monospace" }}>
-        {value}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/lib/store";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { MarketOverview } from "@/components/shared/MarketOverview";
+import { ChatBot } from "@/components/shared/ChatBot";
 
 function LoadingScreen() {
   const [step, setStep] = useState(0);
@@ -97,11 +98,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
+          className="main-content"
           style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}
         >
           {children}
         </motion.main>
       </div>
+      <ChatBot />
     </div>
   );
 }

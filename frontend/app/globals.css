@@ -353,3 +353,57 @@ body {
   color: var(--text-muted);
   margin-top: 3px;
 }
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — MOBILE / TABLET
+═══════════════════════════════════════════════ */
+
+/* Sidebar hidden on mobile by default */
+.sidebar-mobile-hidden { display: flex; }
+.hamburger-btn { display: none; }
+
+@media (max-width: 768px) {
+  /* Sidebar hidden */
+  .sidebar-mobile-hidden { display: none !important; }
+  .sidebar-mobile-hidden.open { display: flex !important; position: fixed; inset: 0; z-index: 200; }
+
+  /* Hamburger visible */
+  .hamburger-btn { display: flex !important; }
+
+  /* Main content full width */
+  .main-content { padding: 16px 14px !important; }
+
+  /* Market overview wraps */
+  .ticker-track { animation: none !important; }
+
+  /* Page titles smaller */
+  .page-title { font-size: 18px !important; }
+
+  /* KPI grids stack to 2 cols */
+  .kpi-grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
+  .kpi-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Dashboard 3-col layout stacks */
+  .dashboard-layout { flex-direction: column !important; }
+
+  /* Hero banner text smaller */
+  .hero-headline { font-size: 20px !important; }
+
+  /* Table horizontal scroll */
+  .data-table { overflow-x: auto; display: block; }
+  .data-table table { min-width: 600px; }
+
+  /* Card padding reduced */
+  .card { border-radius: 12px !important; }
+
+  /* Login page stack */
+  .login-grid { grid-template-columns: 1fr !important; }
+  .login-left { display: none !important; }
+  .login-right { border-left: none !important; }
+}
+
+@media (max-width: 480px) {
+  .main-content { padding: 12px 10px !important; }
+  .page-title { font-size: 16px !important; }
+  .kpi-grid-4, .kpi-grid-3 { grid-template-columns: 1fr !important; }
+}
