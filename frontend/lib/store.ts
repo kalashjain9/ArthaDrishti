@@ -37,6 +37,15 @@ export const useAuthStore = create<AuthState>()(
           await get().fetchMe();
           return true;
         } catch (err: any) {
+          // Demo bypass: if backend is unreachable and demo creds are correct, allow entry
+          const isNetworkError = !err?.response;
+          const isDemoCreds = email === "demo@arthadrishti.ai" && password === "Demo@2024#";
+          if (isNetworkError && isDemoCreds) {
+            const demoUser = { id: "demo", email, username: "demo", full_name: "Demo User" };
+            localStorage.setItem("arthadrishti_token", "DEMO_TOKEN");
+            set({ token: "DEMO_TOKEN", user: demoUser, isLoading: false });
+            return true;
+          }
           const msg = err?.response?.data?.detail || "Invalid email or password";
           set({ error: msg });
           return false;
@@ -66,6 +75,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       fetchMe: async () => {
+        const stored = typeof window !== "undefined" ? localStorage.getItem("arthadrishti_token") : null;
+        if (stored === "DEMO_TOKEN") {
+          set({ user: { id: "demo", email: "demo@arthadrishti.ai", username: "demo", full_name: "Demo User" } });
+          return;
+        }
         try {
           const { data } = await api.get("/auth/me");
           set({ user: data });
