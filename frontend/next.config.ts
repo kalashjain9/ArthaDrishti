@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   images: {
     domains: ["avatars.githubusercontent.com", "img.clerk.com", "images.unsplash.com"],
   },
