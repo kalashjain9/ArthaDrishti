@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  # ─── Backend API ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arthadrishti_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./arthadrishti.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-32-chars-min}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      - GNEWS_API_KEY=${GNEWS_API_KEY:-}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - backend_data:/app/data
+      - chroma_data:/app/chroma_db
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Celery Worker ──────────────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arthadrishti_celery_worker
+    command: celery -A app.tasks.celery_app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./arthadrishti.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-32-chars-min}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - backend_data:/app/data
+      - chroma_data:/app/chroma_db
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped
+
+  # ─── Celery Beat (Scheduler) ─────────────────────────────────────────────────
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arthadrishti_celery_beat
+    command: celery -A app.tasks.celery_app.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./arthadrishti.db
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-32-chars-min}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped
+
+  # ─── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: arthadrishti_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Frontend ────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: arthadrishti_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  chroma_data:
+  redis_data:

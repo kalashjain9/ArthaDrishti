@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Virtual environments
+backend/.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Databases & vector stores
+*.db
+*.sqlite
+*.sqlite3
+chroma_db/
+faiss_index/
+
+# Node
+node_modules/
+.npm
+.yarn
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/.vercel
+
+# Build outputs
+frontend/build/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temp
+*.tmp
+*.temp
